@@ -1,93 +1,76 @@
-import { createIcons, Trash2, FileText } from 'lucide';
+import { api } from '../services/api.js';
+import { createIcons, Trash2, FileText, AlertTriangle, ChevronDown, Minus } from 'lucide';
 
 export class TaskManager {
-  constructor(storage, userId) {
-    this.storage = storage;
+  constructor(userId, filter) {
     this.userId = userId;
-    this.tasks = this.storage.getTasks(userId);
+    this.filter = filter; // 'today', 'tomorrow'
+    this.tasks = [];
+    this.isLoading = true;
+    this.element = document.createElement('div');
+    this.element.className = 'task-section';
   }
 
-  render() {
-    const section = document.createElement('div');
-    section.className = 'task-section';
-
-    section.innerHTML = `
-      <h3>Task Dashboard</h3>
-      <p>Add, Edit, and Manage Your Tasks</p>
+  async render() {
+    this.element.innerHTML = '<div class="spinner-container"><div class="spinner"></div></div>';
+    await this.fetchTasks();
+    this.isLoading = false;
+    
+    const title = this.filter === 'today' ? "Today's Tasks" : "Tomorrow's Tasks";
+    
+    this.element.innerHTML = `
+      ${this.filter === 'today' ? this.renderProgressCard() : ''}
       
-      <form id="taskForm" class="task-form">
-        <div class="form-group">
-          <label class="form-label" for="taskName">Task Name</label>
-          <input 
-            type="text" 
-            id="taskName" 
-            class="form-input" 
-            placeholder="Enter task name" 
-            required
-          />
-        </div>
-        
-        <div class="time-group">
-          <div class="form-group">
-            <label class="form-label" for="startTime">Start Time</label>
-            <input type="time" id="startTime" class="form-input" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="endTime">End Time</label>
-            <input type="time" id="endTime" class="form-input" />
-          </div>
-        </div>
-        
-        <div class="form-group">
-          <label class="form-label" for="dueTime">Due Date & Time</label>
-          <input type="datetime-local" id="dueTime" class="form-input" />
-        </div>
-        
-        <div class="form-group">
-          <label class="form-label" for="priority">Priority</label>
-          <select id="priority" class="form-input">
-            <option value="high">High Priority</option>
-            <option value="low">Low Priority</option>
-          </select>
-        </div>
-        
-        <button type="submit" class="btn btn-success">Add Task</button>
-      </form>
-      
+      <div class="task-list-header">
+        <h3>${title}</h3>
+      </div>
       <div id="taskList" class="task-list"></div>
     `;
 
-    section.querySelector('#taskForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      this.handleAddTask(section);
-    });
-
-    this.renderTasks(section.querySelector('#taskList'));
-
-    createIcons({
-      icons: {
-        Trash2,
-        FileText
-      }
-    });
-
-    return section;
+    this.renderTasks(this.element.querySelector('#taskList'));
+    return this.element;
   }
 
-  handleAddTask(section) {
-    const taskData = {
-      name: section.querySelector('#taskName').value,
-      startTime: section.querySelector('#startTime').value,
-      endTime: section.querySelector('#endTime').value,
-      dueTime: section.querySelector('#dueTime').value,
-      priority: section.querySelector('#priority').value
-    };
+  renderProgressCard() {
+    const completedTasks = this.tasks.filter(t => t.completed).length;
+    const totalTasks = this.tasks.length;
+    const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-    this.storage.addTask(this.userId, taskData);
-    this.tasks = this.storage.getTasks(this.userId);
-    
-    section.querySelector('#taskForm').reset();
-    this.renderTasks(section.querySelector('#taskList'));
+    return `
+      <div class="task-progress-card">
+        <div class="progress-label">
+          <span>Daily Progress</span>
+          <span><strong>${completedTasks} / ${totalTasks} Completed</strong></span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: ${progress}%"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  async fetchTasks() {
+    try {
+      const allTasks = await api.getTasks(this.userId);
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      
+      const tomorrow = new Date();
+      tomorrow.setDate(today.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+      if (this.filter === 'today') {
+        this.tasks = allTasks.filter(t => t.due_time && t.due_time.startsWith(todayStr));
+      } else if (this.filter === 'tomorrow') {
+        this.tasks = allTasks.filter(t => t.due_time && t.due_time.startsWith(tomorrowStr));
+      } else {
+        this.tasks = allTasks;
+      }
+    } catch (error) {
+      console.error("Failed to fetch tasks:", error);
+      alert("Could not load your tasks.");
+      this.tasks = [];
+    }
   }
 
   renderTasks(container) {
@@ -97,7 +80,7 @@ export class TaskManager {
       container.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon"><i data-lucide="file-text"></i></div>
-          <p>No tasks yet. Add your first task to get started!</p>
+          <p>No tasks for ${this.filter}. Enjoy your day!</p>
         </div>
       `;
       createIcons({ icons: { FileText } });
@@ -106,54 +89,40 @@ export class TaskManager {
 
     this.tasks.sort((a, b) => {
       if (a.completed !== b.completed) return a.completed ? 1 : -1;
-      return new Date(b.createdAt) - new Date(a.createdAt);
+      return new Date(b.created_at) - new Date(a.created_at);
     }).forEach(task => {
       const taskItem = this.createTaskItem(task);
       container.appendChild(taskItem);
     });
 
-    createIcons({ icons: { Trash2 } });
+    createIcons({ icons: { Trash2, AlertTriangle, ChevronDown, Minus } });
   }
 
   createTaskItem(task) {
     const item = document.createElement('div');
-    item.className = `task-item ${task.completed ? 'completed' : ''} ${task.priority === 'high' ? 'high-priority' : ''}`;
+    item.className = `task-item ${task.completed ? 'completed' : ''}`;
 
     const formatTime = (time) => {
       if (!time) return '';
-      return new Date(`2000-01-01T${time}`).toLocaleTimeString('en-IN', { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: true 
-      });
+      return new Date(`2000-01-01T${time}`).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true });
     };
 
-    const formatDateTime = (datetime) => {
-      if (!datetime) return '';
-      return new Date(datetime).toLocaleString('en-IN', {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
+    const priorityIcons = {
+      high: 'alert-triangle',
+      medium: 'minus',
+      low: 'chevron-down'
     };
 
     item.innerHTML = `
+      <input type="checkbox" class="task-checkbox" ${task.completed ? 'checked' : ''} data-task-id="${task.id}" />
       <div class="task-content">
-        <div class="task-header">
-          <input 
-            type="checkbox" 
-            class="task-checkbox" 
-            ${task.completed ? 'checked' : ''}
-            data-task-id="${task.id}"
-          />
-          <h4 class="task-title ${task.completed ? 'completed' : ''}">${task.name}</h4>
-        </div>
+        <h4 class="task-title">${task.name}</h4>
         <div class="task-meta">
-          ${task.startTime ? `<span class="task-meta-item">🕐 ${formatTime(task.startTime)}${task.endTime ? ` - ${formatTime(task.endTime)}` : ''}</span>` : ''}
-          ${task.dueTime ? `<span class="task-meta-item">📅 ${formatDateTime(task.dueTime)}</span>` : ''}
-          <span class="priority-badge priority-${task.priority}">${task.priority === 'high' ? '🔴 High' : '🔵 Low'}</span>
+          ${task.start_time ? `<span>${formatTime(task.start_time)}${task.end_time ? ` - ${formatTime(task.end_time)}` : ''}</span>` : ''}
+          <span class="priority-badge priority-${task.priority}">
+            <i data-lucide="${priorityIcons[task.priority] || 'chevron-down'}"></i>
+            ${task.priority}
+          </span>
         </div>
       </div>
       <div class="task-actions">
@@ -161,17 +130,35 @@ export class TaskManager {
       </div>
     `;
 
-    item.querySelector('.task-checkbox').addEventListener('change', (e) => {
-      this.storage.updateTask(task.id, { completed: e.target.checked });
-      this.tasks = this.storage.getTasks(this.userId);
-      this.renderTasks(item.parentElement);
+    item.querySelector('.task-checkbox').addEventListener('change', async (e) => {
+      const isCompleted = e.target.checked;
+      try {
+        await api.updateTask(task.id, { completed: isCompleted });
+        if (isCompleted) {
+          await api.updateStreakOnTaskCompletion(this.userId);
+        }
+        // Refresh view to update progress card
+        await this.fetchTasks();
+        this.renderTasks(item.parentElement);
+        if (this.filter === 'today') {
+            const progressCard = this.element.querySelector('.task-progress-card');
+            if(progressCard) progressCard.outerHTML = this.renderProgressCard();
+        }
+      } catch (error) {
+        alert(`Failed to update task: ${error.message}`);
+        e.target.checked = !isCompleted;
+      }
     });
 
-    item.querySelector('.delete-btn').addEventListener('click', () => {
+    item.querySelector('.delete-btn').addEventListener('click', async () => {
       if (confirm('Are you sure you want to delete this task?')) {
-        this.storage.deleteTask(task.id);
-        this.tasks = this.storage.getTasks(this.userId);
-        this.renderTasks(item.parentElement);
+        try {
+          await api.deleteTask(task.id);
+          await this.fetchTasks();
+          this.renderTasks(item.parentElement);
+        } catch (error) {
+          alert(`Failed to delete task: ${error.message}`);
+        }
       }
     });
 

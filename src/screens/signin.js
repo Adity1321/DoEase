@@ -50,6 +50,8 @@ export class SignInScreen {
 
     const passwordInput = screen.querySelector('#password');
     const toggleBtn = screen.querySelector('.password-toggle-btn');
+    const form = screen.querySelector('#signInForm');
+    const submitButton = form.querySelector('button[type="submit"]');
 
     toggleBtn.addEventListener('click', () => {
       const isPassword = passwordInput.type === 'password';
@@ -58,13 +60,18 @@ export class SignInScreen {
       toggleBtn.setAttribute('title', isPassword ? 'Hide password' : 'Show password');
     });
 
-    screen.querySelector('#signInForm').addEventListener('submit', (e) => {
+    form.addEventListener('submit', (e) => {
       e.preventDefault();
+      submitButton.disabled = true;
+      submitButton.textContent = 'Signing In...';
       const credentials = {
         email: screen.querySelector('#email').value,
         password: screen.querySelector('#password').value
       };
-      this.onSignIn(credentials);
+      this.onSignIn(credentials).finally(() => {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Sign In';
+      });
     });
 
     screen.querySelector('#switchToSignUp').addEventListener('click', (e) => {

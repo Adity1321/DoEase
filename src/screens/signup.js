@@ -37,14 +37,27 @@ export class SignUpScreen {
             />
           </div>
           <div class="form-group">
+            <label class="form-label" for="mobile">Mobile Number</label>
+            <input 
+              type="tel" 
+              id="mobile" 
+              class="form-input" 
+              placeholder="Enter your mobile number"
+              pattern="[0-9]{10,}"
+              title="Please enter a valid mobile number (at least 10 digits)."
+              required
+            />
+          </div>
+          <div class="form-group">
             <label class="form-label" for="password">Password</label>
             <div class="password-input-container">
               <input 
                 type="password" 
                 id="password" 
                 class="form-input" 
-                placeholder="Create a password" 
+                placeholder="Create a password (min. 6 characters)" 
                 required
+                minlength="6"
               />
               <button type="button" class="password-toggle-btn" title="Show password">👁️</button>
             </div>
@@ -60,6 +73,8 @@ export class SignUpScreen {
 
     const passwordInput = screen.querySelector('#password');
     const toggleBtn = screen.querySelector('.password-toggle-btn');
+    const form = screen.querySelector('#signUpForm');
+    const submitButton = form.querySelector('button[type="submit"]');
 
     toggleBtn.addEventListener('click', () => {
       const isPassword = passwordInput.type === 'password';
@@ -68,14 +83,21 @@ export class SignUpScreen {
       toggleBtn.setAttribute('title', isPassword ? 'Hide password' : 'Show password');
     });
 
-    screen.querySelector('#signUpForm').addEventListener('submit', (e) => {
+    form.addEventListener('submit', (e) => {
       e.preventDefault();
+      submitButton.disabled = true;
+      submitButton.textContent = 'Creating Account...';
       const userData = {
         username: screen.querySelector('#username').value,
         email: screen.querySelector('#email').value,
-        password: screen.querySelector('#password').value
+        mobile: screen.querySelector('#mobile').value,
+        password: screen.querySelector('#password').value,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
-      this.onSignUp(userData);
+      this.onSignUp(userData).finally(() => {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Create Account';
+      });
     });
 
     screen.querySelector('#switchToSignIn').addEventListener('click', (e) => {

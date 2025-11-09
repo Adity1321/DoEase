@@ -1,19 +1,27 @@
+import { api } from '../services/api.js';
 import { createIcons, List, CheckSquare, Clock, AlertTriangle, ArrowLeft } from 'lucide';
 
 export class Analytics {
-  constructor(storage, userId) {
-    this.storage = storage;
-    this.userId = userId;
-    this.tasks = this.storage.getTasks(userId);
+  constructor(user) {
+    this.user = user;
+    this.userId = user.id;
+    this.tasks = [];
     this.view = 'overview'; // 'overview' or 'list'
     this.listFilter = null; // 'total', 'completed', 'pending', 'high-priority'
     this.listTitle = '';
     this.element = document.createElement('div');
     this.element.className = 'analytics-section-wrapper';
+    this.isLoading = true;
   }
 
-  render() {
+  async render() {
     this.element.innerHTML = '';
+    if (this.isLoading) {
+      this.element.innerHTML = '<div class="spinner-container"><div class="spinner"></div></div>';
+      await this.fetchTasks();
+      this.isLoading = false;
+    }
+
     if (this.view === 'overview') {
       this.renderOverview();
     } else {
@@ -22,16 +30,30 @@ export class Analytics {
     return this.element;
   }
 
+  async fetchTasks() {
+    try {
+      this.tasks = await api.getTasks(this.userId);
+    } catch (error) {
+      console.error("Failed to fetch tasks for analytics:", error);
+      alert("Could not load analytics data.");
+      this.tasks = [];
+    }
+  }
+
   renderOverview() {
     const completedTasks = this.tasks.filter(t => t.completed).length;
     const totalTasks = this.tasks.length;
-    const incompleteTasks = totalTasks - completedTasks;
+    const pendingTasks = totalTasks - completedTasks;
     const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-    const highPriorityTasks = this.tasks.filter(t => t.priority === 'high').length;
+    const highPriorityTasks = this.tasks.filter(t => t.priority === 'high' && !t.completed).length;
+    const currentStreak = this.user.current_streak || 0;
 
     const overviewEl = document.createElement('div');
     overviewEl.className = 'analytics-section';
     overviewEl.innerHTML = `
+      <div class="content-header">
+        <h2>Analytics</h2>
+      </div>
       <div class="stats-grid">
         <div class="stat-card" data-filter="total" data-title="All Tasks">
           <div class="stat-icon"><i data-lucide="list"></i></div>
@@ -40,39 +62,45 @@ export class Analytics {
         </div>
         
         <div class="stat-card" data-filter="completed" data-title="Completed Tasks">
-          <div class="stat-icon"><i data-lucide="check-square"></i></div>
-          <div class="stat-value">${completedTasks}</div>
-          <div class="stat-label">Completed Tasks</div>
+          <div class="stat-icon" style="color: var(--secondary-color)"><i data-lucide="check-square"></i></div>
+          <div class="stat-value" style="color: var(--secondary-color)">${completedTasks}</div>
+          <div class="stat-label">Completed</div>
         </div>
         
         <div class="stat-card" data-filter="pending" data-title="Pending Tasks">
-          <div class="stat-icon"><i data-lucide="clock"></i></div>
-          <div class="stat-value">${incompleteTasks}</div>
-          <div class="stat-label">Pending Tasks</div>
+          <div class="stat-icon" style="color: var(--warning-color)"><i data-lucide="clock"></i></div>
+          <div class="stat-value" style="color: var(--warning-color)">${pendingTasks}</div>
+          <div class="stat-label">Pending</div>
         </div>
         
         <div class="stat-card" data-filter="high-priority" data-title="High Priority Tasks">
-          <div class="stat-icon"><i data-lucide="alert-triangle"></i></div>
-          <div class="stat-value">${highPriorityTasks}</div>
+          <div class="stat-icon" style="color: var(--danger-color)"><i data-lucide="alert-triangle"></i></div>
+          <div class="stat-value" style="color: var(--danger-color)">${highPriorityTasks}</div>
           <div class="stat-label">High Priority</div>
         </div>
       </div>
       
       <div class="chart-container">
-        <h3>Progress Overview</h3>
+        <h3>Productivity Streak</h3>
+        <div class="streak-display">
+          <div class="streak-value">${currentStreak}</div>
+          <div class="streak-label">Day Streak</div>
+        </div>
+        <p class="streak-explainer" style="text-align: center; font-size: 0.875rem; color: var(--text-secondary)">
+          You're on a ${currentStreak}-day streak! Complete at least one task every day to keep it going.
+        </p>
+      </div>
+
+      <div class="chart-container">
+        <h3>Completion Rate</h3>
         <div class="progress-bar-container">
           <div class="progress-label">
-            <span>Completion Rate</span>
+            <span>Overall Progress</span>
             <span><strong>${progress}%</strong></span>
           </div>
           <div class="progress-bar">
             <div class="progress-fill" style="width: ${progress}%"></div>
           </div>
-        </div>
-        
-        <h3 style="margin-top: 2rem">7-Day Streak</h3>
-        <div class="streak-container">
-          ${this.renderStreakDays()}
         </div>
       </div>
     `;
@@ -107,23 +135,23 @@ export class Analytics {
         filteredTasks = this.tasks.filter(t => !t.completed);
         break;
       case 'high-priority':
-        filteredTasks = this.tasks.filter(t => t.priority === 'high');
+        filteredTasks = this.tasks.filter(t => t.priority === 'high' && !t.completed);
         break;
     }
 
     const listEl = document.createElement('div');
-    listEl.className = 'analytics-list-view';
+    listEl.className = 'analytics-list-view chart-container';
 
     let taskListHtml = '';
     if (filteredTasks.length > 0) {
       taskListHtml = filteredTasks.map(task => `<li>${task.name}</li>`).join('');
     } else {
-      taskListHtml = '<p class="empty-state">No tasks in this category.</p>';
+      taskListHtml = '<p class="empty-state" style="padding: 1rem 0; border: none;">No tasks in this category.</p>';
     }
 
     listEl.innerHTML = `
-      <h3>
-        <button class="btn back-btn"><i data-lucide="arrow-left"></i> Back</button>
+      <h3 style="display: flex; align-items: center; gap: 1rem;">
+        <button class="btn btn-secondary back-btn"><i data-lucide="arrow-left"></i> Back</button>
         <span>${this.listTitle}</span>
       </h3>
       <ul class="task-name-list">
@@ -141,17 +169,6 @@ export class Analytics {
         ArrowLeft
       }
     });
-  }
-
-  renderStreakDays() {
-    const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    const today = new Date().getDay();
-    const dayIndex = today === 0 ? 6 : today - 1;
-    
-    return days.map((day, index) => {
-      const isActive = index <= dayIndex;
-      return `<div class="streak-day ${isActive ? 'active' : ''}">${day}</div>`;
-    }).join('');
   }
 
   showList(filter, title) {

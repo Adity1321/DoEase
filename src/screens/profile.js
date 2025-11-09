@@ -1,7 +1,6 @@
 export class ProfileScreen {
-  constructor(user, onLogout, onUserUpdate) {
+  constructor(user, onUserUpdate) {
     this.user = user;
-    this.onLogout = onLogout;
     this.onUserUpdate = onUserUpdate;
     this.isEditing = false;
     this.element = document.createElement('div');
@@ -9,7 +8,11 @@ export class ProfileScreen {
   }
 
   render() {
-    this.element.innerHTML = ''; // Clear content before re-rendering
+    this.element.innerHTML = `
+      <div class="content-header">
+        <h2>User Profile</h2>
+      </div>
+    `;
     if (this.isEditing) {
       this.element.appendChild(this.renderEditForm());
     } else {
@@ -21,15 +24,21 @@ export class ProfileScreen {
   renderDisplay() {
     const displaySection = document.createElement('div');
     displaySection.className = 'profile-section';
-    const initials = this.user.username.substring(0, 2).toUpperCase();
-
+    
     displaySection.innerHTML = `
-      <div class="profile-avatar-large">${initials}</div>
-      <h2 class="profile-username">${this.user.username}</h2>
-      <p class="profile-email">${this.user.email}</p>
-      <div class="profile-actions">
-        <button class="btn btn-secondary" id="editProfileBtn">Edit Profile</button>
-      </div>
+        <h3>${this.user.username}</h3>
+        <p style="color: var(--text-secondary); margin-top: -0.5rem; margin-bottom: 1rem;">${this.user.email}</p>
+        <div class="form-group" style="text-align: left;">
+            <label class="form-label">Username</label>
+            <input class="form-input" value="${this.user.username}" disabled />
+        </div>
+        <div class="form-group" style="text-align: left;">
+            <label class="form-label">Mobile</label>
+            <input class="form-input" value="${this.user.mobile || 'Not provided'}" disabled />
+        </div>
+        <div class="profile-actions">
+            <button class="btn btn-primary" id="editProfileBtn">Edit Profile</button>
+        </div>
     `;
 
     displaySection.querySelector('#editProfileBtn').addEventListener('click', () => {
@@ -45,7 +54,6 @@ export class ProfileScreen {
     formSection.className = 'profile-section';
 
     formSection.innerHTML = `
-      <h2>Edit Profile</h2>
       <form id="editProfileForm">
         <div class="form-group">
           <label class="form-label" for="editUsername">Username</label>
@@ -58,12 +66,14 @@ export class ProfileScreen {
           />
         </div>
         <div class="form-group">
-          <label class="form-label" for="editEmail">Email</label>
+          <label class="form-label" for="editMobile">Mobile Number</label>
           <input 
-            type="email" 
-            id="editEmail" 
+            type="tel" 
+            id="editMobile" 
             class="form-input" 
-            value="${this.user.email}" 
+            value="${this.user.mobile || ''}"
+            pattern="[0-9]{10,}"
+            title="Please enter a valid mobile number (at least 10 digits)."
             required
           />
         </div>
@@ -74,13 +84,19 @@ export class ProfileScreen {
       </form>
     `;
 
-    formSection.querySelector('#editProfileForm').addEventListener('submit', (e) => {
+    const form = formSection.querySelector('#editProfileForm');
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const updatedUser = {
-        username: formSection.querySelector('#editUsername').value,
-        email: formSection.querySelector('#editEmail').value,
+      const submitButton = form.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
+      submitButton.textContent = 'Saving...';
+
+      const updatedUserData = {
+        username: form.querySelector('#editUsername').value,
+        mobile: form.querySelector('#editMobile').value,
       };
-      this.onUserUpdate(updatedUser);
+
+      await this.onUserUpdate(updatedUserData);
       this.isEditing = false;
     });
 
